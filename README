@@ -1,0 +1,11 @@
+nm-remote
+=========
+
+Command-line scripts to control NetworkManager.
+
+Right now there are all of two:
+
+ * list; lists all user-defined connections.
+ * vpn; controls VPN connections, 'vpn on foo' tells NetworkManager to connect
+   the first VPN connection with a name matching foo. 'vpn off foo'
+   disconnects VPN connections.
