@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+
+from pprint import pprint
+from dbus import SystemBus, Interface
+
+settings_name = 'org.freedesktop.NetworkManagerUserSettings'
+settings_path = '/org/freedesktop/NetworkManagerSettings'
+manager_name = 'org.freedesktop.NetworkManager'
+manager_path = '/org/freedesktop/NetworkManager'
+manager_interface = 'org.freedesktop.NetworkManager'
+settings_interface = 'org.freedesktop.NetworkManagerSettings'
+connection_interface = 'org.freedesktop.NetworkManagerSettings.Connection'
+active_connection_interface = 'org.freedesktop.NetworkManager.Connection.Active'
+property_interface = 'org.freedesktop.DBus.Properties'
+
+def main(action, filter=''):
+    bus = SystemBus()
+    settings_proxy = bus.get_object(settings_name, settings_path)
+    settings = Interface(settings_proxy, settings_interface)
+
+    # Get the VPN connection.
+    vpn_connection = find_connection(bus, settings, 'vpn', filter)
+    if action == 'on':
+        activate_vpn_connection(bus, vpn_connection)
+    elif action == 'off':
+        deactivate_connection(bus, settings_name, vpn_connection)
+
+def find_connection(bus, settings, type, pattern):
+    for connection_path in settings.ListConnections():
+        connection_proxy = bus.get_object(settings_name, connection_path)
+        connection = Interface(connection_proxy, connection_interface)
+        connection_settings = connection.GetSettings()
+        if connection_settings['connection']['type'] <> 'vpn':
+            continue
+        if not pattern in connection_settings['connection']['id']:
+            continue
+        break
+    else:
+        raise AssertionError('CSIS VPN connection not found.')
+    return connection_path
+
+def activate_vpn_connection(bus, vpn_connection):
+    # Get a connection to connect the VPN via.
+    manager_proxy = bus.get_object(manager_name, manager_path)
+    manager = Interface(manager_proxy, manager_interface)
+    active_connections = manager_proxy.Get(manager_interface,
+                                           'ActiveConnections',
+                                           dbus_interface=property_interface)
+    if not active_connections:
+        raise AssertionError('No active connection to use.')
+    active_connection = active_connections[0]
+
+    # Tell NetworkManager to connect it.
+    manager.ActivateConnection(settings_name,
+                               vpn_connection, '/', active_connection)
+
+def deactivate_connection(bus, service_name, connection):
+    manager_proxy = bus.get_object(manager_name, manager_path)
+    manager = Interface(manager_proxy, manager_interface)
+    active_connections = manager_proxy.Get(manager_interface,
+                                           'ActiveConnections',
+                                           dbus_interface=property_interface)
+    for connection_path in active_connections:
+        connection_proxy = bus.get_object(manager_name, connection_path)
+        properties = connection_proxy.GetAll(active_connection_interface,
+                                             dbus_interface=property_interface)
+        if properties['Connection'] <> connection:
+            continue
+        if properties['ServiceName'] <> service_name:
+            continue
+        break
+    else:
+        raise AssertionError('Active VPN connection not found.')
+
+    # Tell NetworkManager to connect it.
+    manager.DeactivateConnection(connection_path)
+
+if __name__ == '__main__':
+    import sys
+    main(*sys.argv[1:])
