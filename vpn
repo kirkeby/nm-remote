@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from pprint import pprint
+from optparse import OptionParser
 from dbus import SystemBus, Interface
 
 settings_name = 'org.freedesktop.NetworkManagerUserSettings'
@@ -13,13 +14,16 @@ connection_interface = 'org.freedesktop.NetworkManagerSettings.Connection'
 active_connection_interface = 'org.freedesktop.NetworkManager.Connection.Active'
 property_interface = 'org.freedesktop.DBus.Properties'
 
-def main(action, filter=''):
+options = OptionParser(usage='Usage: %prog [options] on|off')
+options.add_option('-f', '--filter', default='')
+
+def main(opts, action):
     bus = SystemBus()
     settings_proxy = bus.get_object(settings_name, settings_path)
     settings = Interface(settings_proxy, settings_interface)
 
     # Get the VPN connection.
-    vpn_connection = find_connection(bus, settings, 'vpn', filter)
+    vpn_connection = find_connection(bus, settings, 'vpn', opts.filter)
     if action == 'on':
         activate_vpn_connection(bus, vpn_connection)
     elif action == 'off':
@@ -36,7 +40,7 @@ def find_connection(bus, settings, type, pattern):
             continue
         break
     else:
-        raise AssertionError('CSIS VPN connection not found.')
+        raise AssertionError('VPN connection not found.')
     return connection_path
 
 def activate_vpn_connection(bus, vpn_connection):
@@ -76,5 +80,7 @@ def deactivate_connection(bus, service_name, connection):
     manager.DeactivateConnection(connection_path)
 
 if __name__ == '__main__':
-    import sys
-    main(*sys.argv[1:])
+    opts, args = options.parse_args()
+    if len(args) <> 1:
+        options.error('incorrect number of arguments')
+    main(opts, *args)
