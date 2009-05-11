@@ -12,27 +12,34 @@ settings_interface = 'org.freedesktop.NetworkManagerSettings'
 connection_interface = 'org.freedesktop.NetworkManagerSettings.Connection'
 property_interface = 'org.freedesktop.DBus.Properties'
 
-def pprint_settings(settings, indent='  '):
-    for key, value in settings.items():
-        print indent + key + ':',
-        if isinstance(value, dict):
-            print
-            pprint_settings(value, indent + '  ')
-        elif isinstance(value, list):
-            if value.signature == 's':
-                print ', '.join(value)
-            elif value.signature == 'y':
-                print ''.join(map(chr, value))
-            else:
-                if not value:
-                    print 'empty',
-                print 'array of',
-                print '%s/%d' % (value.signature, value.variant_level),
-                if value:
-                    print ':',
-                print ', '.join(value)
+def format_settings(settings, indent):
+    return '\n'.join(format_setting(key, value, indent)
+                     for key, value in settings.items())
+
+def format_setting(key, value, indent):
+    pieces = [indent, key, ': ']
+    if isinstance(value, dict):
+        pieces.append('\n')
+        pieces.extend(format_settings(value, indent + '  '))
+    elif isinstance(value, list):
+        if value.signature == 's':
+            pieces.append(', '.join(value))
+        elif value.signature == 'y':
+            pieces.append(''.join(map(chr, value)))
         else:
-            print value
+            if not value:
+                pieces.append('empty ')
+            pieces.append('array of %s/%d'
+                          % (value.signature, value.variant_level))
+            if value:
+                pieces.append(': ')
+            pieces.append(', '.join(map(str, value)))
+    else:
+        pieces.append(str(value))
+    return ''.join(pieces)
+    
+def pprint_settings(settings, indent='  '):
+    print format_settings(settings, indent)
     
 def main():
     bus = SystemBus()
