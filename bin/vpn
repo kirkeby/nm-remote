@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 from pprint import pprint
 from optparse import OptionParser
 from dbus import SystemBus, Interface
@@ -14,34 +15,35 @@ connection_interface = 'org.freedesktop.NetworkManagerSettings.Connection'
 active_connection_interface = 'org.freedesktop.NetworkManager.Connection.Active'
 property_interface = 'org.freedesktop.DBus.Properties'
 
-options = OptionParser(usage='Usage: %prog [options] on|off')
-options.add_option('-f', '--filter', default='')
+options = OptionParser(usage='Usage: %prog on|off [vpn-connection]')
 
-def main(opts, action):
+def main(opts, action, filter=''):
     bus = SystemBus()
     settings_proxy = bus.get_object(settings_name, settings_path)
     settings = Interface(settings_proxy, settings_interface)
 
     # Get the VPN connection.
-    vpn_connection = find_connection(bus, settings, 'vpn', opts.filter)
+    vpn_connection, name = find_connection(bus, settings, 'vpn', filter)
     if action == 'on':
         activate_vpn_connection(bus, vpn_connection)
     elif action == 'off':
         deactivate_connection(bus, settings_name, vpn_connection)
 
 def find_connection(bus, settings, type, pattern):
+    pattern = re.compile(pattern, re.I)
     for connection_path in settings.ListConnections():
         connection_proxy = bus.get_object(settings_name, connection_path)
         connection = Interface(connection_proxy, connection_interface)
         connection_settings = connection.GetSettings()
         if connection_settings['connection']['type'] <> 'vpn':
             continue
-        if not pattern in connection_settings['connection']['id']:
+        connection_name = connection_settings['connection']['id']
+        if not pattern.search(connection_name):
             continue
         break
     else:
         raise AssertionError('VPN connection not found.')
-    return connection_path
+    return connection_path, connection_name
 
 def activate_vpn_connection(bus, vpn_connection):
     # Get a connection to connect the VPN via.
@@ -81,6 +83,6 @@ def deactivate_connection(bus, service_name, connection):
 
 if __name__ == '__main__':
     opts, args = options.parse_args()
-    if len(args) <> 1:
+    if len(args) < 1:
         options.error('incorrect number of arguments')
     main(opts, *args)
